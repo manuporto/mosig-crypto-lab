@@ -6,8 +6,29 @@
 #define D_SIP_ROUNDS 4
 #define B_BYTE_M 8
 
+#define ROTATE_LEFT(x, b) (unsigned long)(((x) << (b)) | ((x) >> (64 - (b))))
+// #define ROTATE_LEFT(x, b) (unsigned long)((x) << (b))
 
-uint64_t siphash_2_4(uint64_t k[2], uint8_t *m, unsigned int mlen) {
+void sip_round(uint64_t *v0, uint64_t *v1, uint64_t *v2, uint64_t *v3, int rounds) {
+    for (int i = 0; i < rounds; i++) {
+        *v0 += *v1;
+        *v2 += *v3;
+        *v1 = ROTATE_LEFT(*v1, 13);
+        *v3 = ROTATE_LEFT(*v3, 16);
+        *v1 ^= *v0;
+        *v3 ^= *v2;
+        *v0 = ROTATE_LEFT(*v0, 32);
+        *v2 += *v1;
+        *v0 += *v3;
+        *v1 = ROTATE_LEFT(*v1, 17);
+        *v3 = ROTATE_LEFT(*v3, 21);
+        *v1 ^= *v2;
+        *v3 ^= *v0;
+        *v2 = ROTATE_LEFT(*v2, 32); 
+    }
+}
+
+uint64_t siphash_2_4(const uint64_t k[2], const uint8_t *m, const unsigned int mlen) {
     // Initialization
     uint64_t v0 = k[0] ^ 0x736f6d6570736575;
     uint64_t v1 = k[1] ^ 0x646f72616e646f6d;
@@ -15,25 +36,29 @@ uint64_t siphash_2_4(uint64_t k[2], uint8_t *m, unsigned int mlen) {
     uint64_t v3 = k[1] ^ 0x7465646279746573;
     uint64_t ff = 0xff;
 
+    printf("===================\n");
     printf("v0 = %#8lx\n", v0);
     printf("v1 = %#8lx\n", v1);
     printf("v2 = %#8lx\n", v2);
-    printf("v3 = %#8lx\n", v3);
+    printf("v3 = %#8lx\n\n", v3);
 
     // Compression
     for (unsigned int i = 0; i < mlen; i++) {
-        printf("Mi = %#x\n", m[i]);
         v3 ^= m[i];
-        for (unsigned int j = 0; j < C_SIP_ROUNDS; j++) v0 ^= m[i];
+        sip_round(&v0, &v1, &v2, &v3, C_SIP_ROUNDS);
+        v0 ^= m[i];
     }
+    v2 ^= ff;
 
-    // for (unsigned int i = 0; i < D_SIP_ROUNDS; i++) v2 ^= ff;
+    sip_round(&v0, &v1, &v2, &v3, D_SIP_ROUNDS);
 
-    uint64_t res = v0;
-    res ^= v1; 
-    res ^= v2; 
-    res ^= v3;
-    printf("Res: %#8lx\n", res);
+    uint64_t res = v0 ^ v1 ^ v2 ^ v3;
+    printf("-------------------\n");
+    printf("v0 = %#8lx\n", v0);
+    printf("v1 = %#8lx\n", v1);
+    printf("v2 = %#8lx\n", v2);
+    printf("v3 = %#8lx\n\n", v3);
+
     return res;
 }
 
