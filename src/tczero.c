@@ -54,7 +54,7 @@ uint64_t rotr64(uint64_t x, unsigned r)
 	return ((x >> r) | ((x << (64 - r))));
 }
 
-/* 
+/*
  * The next three functions come from SHA-512
  * Note that (Sigma0 ^ Sigma1 ^ sigma0) is invertible
  */
