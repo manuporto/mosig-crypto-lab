@@ -9,101 +9,99 @@ size_t second_iv = 0;
 
 size_t cbc_enc(uint64_t key[2], uint8_t *pt, uint8_t *ct, size_t plen) {
     uint64_t x[2] = {};
-    for (size_t i = 0; i < 8; i++) {
-        addToBitsAtPosition(i, &x[0], pt[i]);
-        addToBitsAtPosition(i, &x[1], pt[i+8]);
+    for (size_t i = 0; i*8 < plen; i+=2) {
+        x[0] = Uint8ArrtoUint64(pt, 8*i);
+        x[1] = Uint8ArrtoUint64(pt, 8*(i+1));
+
+        x[0] ^= first_iv;
+        x[1] ^= second_iv;
+
+        printf("\nx before encryption: %lu %lu ", x[0], x[1]);
+
+        tc0_encrypt(x, key);
+
+        printf("\nx after encryption: %lu %lu ", x[0], x[1]);
+
+        Uint64toUint8Arr(ct, x[0], 8*i);
+        Uint64toUint8Arr(ct, x[1], 8*(i+1));
     }
 
-    x[0] ^= first_iv;
-    x[1] ^= second_iv;
-    printf("\nx before encryption: %lu %lu ", x[0], x[1]);
-    tc0_encrypt(x, key);
-    printf("\nx after encryption: %lu %lu ", x[0], x[1]);
-    backToArray(ct, x[0], 0);
-    backToArray(ct, x[1], 8);
 
-    // ct[i] = x[0];
-    // ct[(i + 1)]  = x[1];
     printf("\n");
     return 0;
 }
 
 size_t cbc_dec(uint64_t key[2], uint8_t *ct, uint8_t *pt, size_t clen) {
     uint64_t x[2] = {};
-    for (size_t i = 0; i < 8; i++) {
-      printf("%u %u\n", ct[i], ct[i+8]);
-        addToBitsAtPosition(i, &x[0], ct[i]);
-        addToBitsAtPosition(i, &x[1], ct[i+8]);
-    }
-    printf("\nx before decryption: %lu %lu ", x[0], x[1]);
 
-    tc0_decrypt(x, key);
-    x[0] ^= first_iv;
-    x[1] ^= second_iv;
+    for (size_t i = 0; i*8 < clen; i+=2) {
+        x[0] = Uint8ArrtoUint64(ct, 8*i);
+        x[1] = Uint8ArrtoUint64(ct, 8*(i+1));
 
-    printf("\nx after decryption: %lu %lu ", x[0], x[1]);
 
-    uint8_t intermidiate[16] = {};
-    backToArray(intermidiate, x[0], 0);
-    backToArray(intermidiate, x[1], 8);
+        printf("\nx before decryption: %lu %lu ", x[0], x[1]);
 
-    for (size_t i = 0; i < 8; i++) {
-      ct[7 - i] = intermidiate[i];
-      ct[15 - i]= intermidiate[i+8];
+        tc0_decrypt(x, key);
+        x[0] ^= first_iv;
+        x[1] ^= second_iv;
+
+        printf("\nx after decryption: %lu %lu ", x[0], x[1]);
+
+        Uint64toUint8Arr(pt, x[0], 8*i);
+        Uint64toUint8Arr(pt, x[1], 8*(i+1));
     }
 
 
 
-    // for (size_t i = 0; i < clen; i += 2) {
-    //     uint64_t x[] = {ct[i], ct[(i + 1)]};
-    //     uint64_t ci[] = {x[0], x[1]};
-    //     tc0_decrypt(x, key);
-    //     x[0] ^= first_iv;
-    //     x[1] ^= second_iv;
-    //     printf("++x[%u] %u, x[%u] %u \n",i, x[0], i+1, x[1]);
-    //     first_iv = ci[0];
-    //     second_iv = ci[1];
-    //     pt[i] = x[0];
-    //     pt[(i + 1)]  = x[1];
-    // }
-    // printf("\n");
 
     return 0;
 }
 
-void addToBitsAtPosition(uint8_t location, uint64_t *bits, uint8_t to_be_added)
-{
-    *bits |= ((uint64_t)to_be_added << (location * 8));
+uint64_t Uint8ArrtoUint64 (uint8_t* var, uint32_t lowest_pos){
+    return  (((uint64_t)var[lowest_pos+7]) << 56) |
+            (((uint64_t)var[lowest_pos+6]) << 48) |
+            (((uint64_t)var[lowest_pos+5]) << 40) |
+            (((uint64_t)var[lowest_pos+4]) << 32) |
+            (((uint64_t)var[lowest_pos+3]) << 24) |
+            (((uint64_t)var[lowest_pos+2]) << 16) |
+            (((uint64_t)var[lowest_pos+1]) << 8)  |
+            (((uint64_t)var[lowest_pos])   << 0);
 }
 
-void backToArray(uint8_t *ct, uint64_t bits, size_t offset){
-    for(uint_fast8_t i=0; i<8; i++)
-    {
-      ct[i + offset] = (bits >> (56-(i*8)) & 0xFF);
-    }
+void Uint64toUint8Arr (uint8_t* buf, uint64_t var, uint32_t lowest_pos){
+    buf[lowest_pos]     =   (var & 0x00000000000000FF) >> 0 ;
+    buf[lowest_pos+1]   =   (var & 0x000000000000FF00) >> 8 ;
+    buf[lowest_pos+2]   =   (var & 0x0000000000FF0000) >> 16 ;
+    buf[lowest_pos+3]   =   (var & 0x00000000FF000000) >> 24 ;
+    buf[lowest_pos+4]   =   (var & 0x000000FF00000000) >> 32 ;
+    buf[lowest_pos+5]   =   (var & 0x0000FF0000000000) >> 40 ;
+    buf[lowest_pos+6]   =   (var & 0x00FF000000000000) >> 48 ;
+    buf[lowest_pos+7]   =   (var & 0xFF00000000000000) >> 56 ;
 }
 
 int main(int argc, char const *argv[]) {
   uint64_t key[2] = {0,0};
-
-  size_t plen = 16;
-  // uint64_t plaintext[] = "0123456789abcdef";
-  uint8_t plaintext[] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
-
-  uint8_t ciphertext[16] = {};
-  uint8_t plaintext2[16] = {};
+  //
+  size_t plen = 32;
+  uint8_t plaintext[32] = "0123456789abcdef0123456789abcdef";
+  // uint8_t plaintext[] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+  //
+  uint8_t ciphertext[32] = {};
+  uint8_t plaintext2[32] = {};
 
   cbc_enc(key, plaintext, ciphertext, plen);
+
   printf("encryption:\n");
   for (size_t i = 0; i < plen; i++) {
     printf("%u ", ciphertext[i]);
   }
-  printf("\ndectyption:\n");
   first_iv = 0;
   second_iv = 0;
   cbc_dec(key, ciphertext, plaintext2, plen);
+  printf("\ndectyption:\n");
   for (size_t i = 0; i < plen; i++) {
-    printf("%u ", plaintext2[i]);
+    printf("%c", plaintext2[i]);
   }
+
   return 0;
 }
