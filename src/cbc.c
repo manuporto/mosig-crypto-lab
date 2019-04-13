@@ -2,9 +2,9 @@
 #include "tczero.h"
 #include <stdio.h>
 
-size_t iv = 1;
-size_t first_iv = 0;
-size_t second_iv = 0;
+uint64_t iv = 1;
+uint64_t first_iv = 0;
+uint64_t second_iv = 0;
 
 
 size_t cbc_enc(uint64_t key[2], uint8_t *pt, uint8_t *ct, size_t plen) {
@@ -24,6 +24,9 @@ size_t cbc_enc(uint64_t key[2], uint8_t *pt, uint8_t *ct, size_t plen) {
 
         Uint64toUint8Arr(ct, x[0], 8*i);
         Uint64toUint8Arr(ct, x[1], 8*(i+1));
+
+        first_iv = x[0];
+        second_iv = x[1];
     }
 
 
@@ -33,10 +36,12 @@ size_t cbc_enc(uint64_t key[2], uint8_t *pt, uint8_t *ct, size_t plen) {
 
 size_t cbc_dec(uint64_t key[2], uint8_t *ct, uint8_t *pt, size_t clen) {
     uint64_t x[2] = {};
-
+    uint64_t next_iv[2] = {};
     for (size_t i = 0; i*8 < clen; i+=2) {
         x[0] = Uint8ArrtoUint64(ct, 8*i);
         x[1] = Uint8ArrtoUint64(ct, 8*(i+1));
+        next_iv[0] = x[0];
+        next_iv[1] = x[1];
 
 
         printf("\nx before decryption: %lu %lu ", x[0], x[1]);
@@ -45,6 +50,9 @@ size_t cbc_dec(uint64_t key[2], uint8_t *ct, uint8_t *pt, size_t clen) {
         x[0] ^= first_iv;
         x[1] ^= second_iv;
 
+
+        first_iv = next_iv[0];
+        second_iv = next_iv[1];
         printf("\nx after decryption: %lu %lu ", x[0], x[1]);
 
         Uint64toUint8Arr(pt, x[0], 8*i);
