@@ -23,6 +23,7 @@ void test_cbc_enc_is_not_deterministic() {
     printf("Printing cipher texts...\n");
     for (size_t i = 0; i < plen; i++) {
         printf("%lu: %u | %u\n", i, ct_1[i], ct_2[i]);
+        assert(ct_1[i] != ct_2[i]);
     }
     printf("Done\n");
 }
@@ -46,6 +47,7 @@ void test_cbc_enc_and_dec() {
   printf("\nDecryption:\n");
   for (size_t i = 0; i < plen; i++) {
     printf("%c", plaintext2[i]);
+    assert(plaintext[i] == plaintext2[i]);
   }
 }
 
