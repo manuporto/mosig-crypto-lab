@@ -12,6 +12,18 @@ const size_t MAX_ENCRYPTIONS = 1;
 size_t number_of_encryptions = 1;
 uint64_t current_iv[2] = {};
 
+// Function to get random data and put it in buf.
+// Note getrandom function from linux/random.h was not used because I do not posses a new enough kernel (Manuel)
+ssize_t get_random(void *buf, size_t buflen) {
+  int randomData = open("/dev/urandom", O_RDONLY);
+    if (randomData < 0) {
+      // something went wrong
+      return -1;
+    } else {
+      return read(randomData, buf, buflen);
+    }
+}
+
 void generate_iv(uint64_t iv[]) {
   if (number_of_encryptions < MAX_ENCRYPTIONS) {
     current_iv[0]++;
@@ -19,17 +31,7 @@ void generate_iv(uint64_t iv[]) {
     number_of_encryptions++;
   } else {
     // Generate a totally new random IV
-    int randomData = open("/dev/urandom", O_RDONLY);
-    if (randomData < 0) {
-      // something went wrong
-      exit(1);
-    } else {
-      ssize_t result = read(randomData, current_iv, sizeof(uint64_t) * 2);
-      if (result < 0) {
-        // something went wrong
-        exit(1);
-      }
-    }
+    get_random(current_iv, sizeof(uint64_t) * 2);
     number_of_encryptions = 0;
   }
   iv[0] = current_iv[0];
