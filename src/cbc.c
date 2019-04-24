@@ -2,19 +2,24 @@
 #include "tczero.h"
 #include <stdio.h>
 
-uint64_t iv = 1;
-uint64_t first_iv = 0;
-uint64_t second_iv = 0;
-
+void generate_iv(uint64_t iv[]) {
+  iv[0] = 0;
+  iv[1] = 0;
+}
 
 size_t cbc_enc(uint64_t key[2], uint8_t *pt, uint8_t *ct, size_t plen) {
     uint64_t x[2] = {};
+    uint64_t iv[2] = {};
+    // First we generate the IV and we prepend it to the ciphertext
+    generate_iv(iv);
+    Uint64toUint8Arr(ct, iv[0], 0);
+    Uint64toUint8Arr(ct, iv[1], 8);
     for (size_t i = 0; i*8 < plen; i+=2) {
         x[0] = Uint8ArrtoUint64(pt, 8*i);
         x[1] = Uint8ArrtoUint64(pt, 8*(i+1));
 
-        x[0] ^= first_iv;
-        x[1] ^= second_iv;
+        x[0] ^= iv[0];
+        x[1] ^= iv[1];
 
         printf("\nx before encryption: %lu %lu ", x[0], x[1]);
 
@@ -22,24 +27,28 @@ size_t cbc_enc(uint64_t key[2], uint8_t *pt, uint8_t *ct, size_t plen) {
 
         printf("\nx after encryption: %lu %lu ", x[0], x[1]);
 
-        Uint64toUint8Arr(ct, x[0], 8*i);
-        Uint64toUint8Arr(ct, x[1], 8*(i+1));
+        // We need to offset the ciphertext by 16 bytes becaues of the IV
+        Uint64toUint8Arr(ct, x[0], 8*(i + 2));
+        Uint64toUint8Arr(ct, x[1], 8*(i + 3));
 
-        first_iv = x[0];
-        second_iv = x[1];
+        iv[0] = x[0];
+        iv[1] = x[1];
     }
-
-
     printf("\n");
     return 0;
 }
 
 size_t cbc_dec(uint64_t key[2], uint8_t *ct, uint8_t *pt, size_t clen) {
     uint64_t x[2] = {};
+    uint64_t iv[2] = {};
     uint64_t next_iv[2] = {};
+    // We extract the IV prepended to the ciphertext
+    iv[0] = Uint8ArrtoUint64(ct, 0);
+    iv[1] = Uint8ArrtoUint64(ct, 8);
     for (size_t i = 0; i*8 < clen; i+=2) {
-        x[0] = Uint8ArrtoUint64(ct, 8*i);
-        x[1] = Uint8ArrtoUint64(ct, 8*(i+1));
+        // We need to offset the ciphertext by 16 bytes becaues of the IV
+        x[0] = Uint8ArrtoUint64(ct, 8*(i+2));
+        x[1] = Uint8ArrtoUint64(ct, 8*(i+3));
         next_iv[0] = x[0];
         next_iv[1] = x[1];
 
@@ -47,21 +56,17 @@ size_t cbc_dec(uint64_t key[2], uint8_t *ct, uint8_t *pt, size_t clen) {
         printf("\nx before decryption: %lu %lu ", x[0], x[1]);
 
         tc0_decrypt(x, key);
-        x[0] ^= first_iv;
-        x[1] ^= second_iv;
+        x[0] ^= iv[0];
+        x[1] ^= iv[1];
 
 
-        first_iv = next_iv[0];
-        second_iv = next_iv[1];
+        iv[0] = next_iv[0];
+        iv[1] = next_iv[1];
         printf("\nx after decryption: %lu %lu ", x[0], x[1]);
 
         Uint64toUint8Arr(pt, x[0], 8*i);
         Uint64toUint8Arr(pt, x[1], 8*(i+1));
     }
-
-
-
-
     return 0;
 }
 
@@ -93,23 +98,22 @@ int main(int argc, char const *argv[]) {
   size_t plen = 32;
   uint8_t plaintext[32] = "0123456789abcdef0123456789abcdef";
   // uint8_t plaintext[] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
-  //
-  uint8_t ciphertext[32] = {};
+  // Cipher text has 16 additional bytes to store the IV
+  size_t clen = 48;
+  uint8_t ciphertext[48] = {};
   uint8_t plaintext2[32] = {};
 
   cbc_enc(key, plaintext, ciphertext, plen);
 
-  printf("encryption:\n");
-  for (size_t i = 0; i < plen; i++) {
+  printf("encryption (IV not included):\n");
+  for (size_t i = 16; i < clen; i++) {
     printf("%u ", ciphertext[i]);
   }
-  first_iv = 0;
-  second_iv = 0;
+
   cbc_dec(key, ciphertext, plaintext2, plen);
   printf("\ndectyption:\n");
   for (size_t i = 0; i < plen; i++) {
     printf("%c", plaintext2[i]);
   }
-
   return 0;
 }
