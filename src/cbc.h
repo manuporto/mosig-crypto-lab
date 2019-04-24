@@ -16,5 +16,7 @@ uint64_t Uint8ArrtoUint64 (uint8_t* var, uint32_t lowest_pos);
 
 void Uint64toUint8Arr (uint8_t* buf, uint64_t var, uint32_t lowest_pos);
 
+uint64_t attack(uint8_t *ct, size_t ctlen);
+
 
 #endif

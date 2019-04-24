@@ -1,11 +1,16 @@
 #include "cbc.h"
 #include "tczero.h"
-#include <stdio.h>
+#include<stdio.h>
+#include<stdlib.h>
+#include<time.h>
 
-uint64_t iv = 1;
-uint64_t first_iv = 0;
-uint64_t second_iv = 0;
 
+uint64_t first_iv;
+uint64_t second_iv;
+
+uint64_t random_iv(){
+  return rand() % 10 + 1;
+}
 
 size_t cbc_enc(uint64_t key[2], uint8_t *pt, uint8_t *ct, size_t plen) {
     uint64_t x[2] = {};
@@ -16,11 +21,9 @@ size_t cbc_enc(uint64_t key[2], uint8_t *pt, uint8_t *ct, size_t plen) {
         x[0] ^= first_iv;
         x[1] ^= second_iv;
 
-        printf("\nx before encryption: %lu %lu ", x[0], x[1]);
+        printf("\nx first_iv: %lu second_iv: %lu ", first_iv, second_iv);
 
         tc0_encrypt(x, key);
-
-        printf("\nx after encryption: %lu %lu ", x[0], x[1]);
 
         Uint64toUint8Arr(ct, x[0], 8*i);
         Uint64toUint8Arr(ct, x[1], 8*(i+1));
@@ -44,7 +47,7 @@ size_t cbc_dec(uint64_t key[2], uint8_t *ct, uint8_t *pt, size_t clen) {
         next_iv[1] = x[1];
 
 
-        printf("\nx before decryption: %lu %lu ", x[0], x[1]);
+        printf("\nx first_iv: %lu second_iv: %lu ", first_iv, second_iv);
 
         tc0_decrypt(x, key);
         x[0] ^= first_iv;
@@ -53,15 +56,10 @@ size_t cbc_dec(uint64_t key[2], uint8_t *ct, uint8_t *pt, size_t clen) {
 
         first_iv = next_iv[0];
         second_iv = next_iv[1];
-        printf("\nx after decryption: %lu %lu ", x[0], x[1]);
 
         Uint64toUint8Arr(pt, x[0], 8*i);
         Uint64toUint8Arr(pt, x[1], 8*(i+1));
     }
-
-
-
-
     return 0;
 }
 
@@ -87,9 +85,19 @@ void Uint64toUint8Arr (uint8_t* buf, uint64_t var, uint32_t lowest_pos){
     buf[lowest_pos+7]   =   (var & 0xFF00000000000000) >> 56 ;
 }
 
+uint64_t attack(uint8_t *ct, size_t ctlen){}
+
 int main(int argc, char const *argv[]) {
+  srand ( time(NULL) );
+  first_iv = random_iv();
+  second_iv = random_iv();
+
+
+
+  printf("\nx first_iv: %lu second_iv: %lu ", first_iv, second_iv);
   uint64_t key[2] = {0,0};
-  //
+  uint64_t iv_temp[2] = {first_iv,second_iv};
+
   size_t plen = 32;
   uint8_t plaintext[32] = "0123456789abcdef0123456789abcdef";
   // uint8_t plaintext[] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
@@ -103,8 +111,8 @@ int main(int argc, char const *argv[]) {
   for (size_t i = 0; i < plen; i++) {
     printf("%u ", ciphertext[i]);
   }
-  first_iv = 0;
-  second_iv = 0;
+  first_iv = iv_temp[0];
+  second_iv = iv_temp[1];
   cbc_dec(key, ciphertext, plaintext2, plen);
   printf("\ndectyption:\n");
   for (size_t i = 0; i < plen; i++) {
