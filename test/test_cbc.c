@@ -24,7 +24,7 @@ void test_cbc_enc_is_not_deterministic() {
     cbc_enc(key, pt, ct_1, plen);
     cbc_enc(key, pt, ct_2, plen);
 
-    printf("Printing cipher texts...\n");
+    printf("Printing cipher texts and checking they differ...\n");
     bool equals = true;
     for (size_t i = 0; i < clen; i++) {
         printf("%lu: %u | %u\n", i, ct_1[i], ct_2[i]);
@@ -50,8 +50,8 @@ uint64_t key[2] = {0, 0};
 
     cbc_enc(key, plaintext, ciphertext, plen);
 
-    printf("Encryption (IV not included):\n");
-    for (size_t i = 16; i < clen; i++) {
+    printf("Encryption:\n");
+    for (size_t i = 0; i < clen; i++) {
       printf("%u ", ciphertext[i]);
     }
 
@@ -61,12 +61,13 @@ uint64_t key[2] = {0, 0};
       printf("%c", plaintext2[i]);
       assert(plaintext[i] == plaintext2[i]);
     }
+    printf("\n");
 }
 
 void run_cbc_enc_tests() {
-    printf("-------------- Testing CBC encryption determinism --------------\n");
+    printf("-------------- Testing CBC encryption non determinism --------------\n");
     test_cbc_enc_is_not_deterministic();
-    printf("-------------- Done testing CBC encryption determinism --------------\n");
+    printf("-------------- Done testing CBC encryption non determinism --------------\n");
 
     printf("-------------- Testing CBC encryption and decryption --------------\n");
     test_cbc_enc_and_dec();
