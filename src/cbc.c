@@ -121,30 +121,3 @@ void Uint64toUint8Arr(uint8_t *buf, uint64_t var, uint32_t lowest_pos) {
 }
 
 uint64_t attack(uint8_t *ct, size_t ctlen){}
-
-int main(int argc, char const *argv[]) {
-
-    uint64_t key[2] = {0, 0};
-    //
-    size_t plen = 32;
-    uint8_t plaintext[] = "0123456789abcdef0123456789abcdef";
-    // uint8_t plaintext[] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
-    // Cipher text has 16 additional bytes to store the IV
-    size_t clen = 48;
-    uint8_t ciphertext[48] = {};
-    uint8_t plaintext2[32] = {};
-
-    cbc_enc(key, plaintext, ciphertext, plen);
-
-    printf("encryption (IV not included):\n");
-    for (size_t i = 16; i < clen; i++) {
-      printf("%u ", ciphertext[i]);
-    }
-
-    cbc_dec(key, ciphertext, plaintext2, plen);
-    printf("\ndectyption:\n");
-    for (size_t i = 0; i < plen; i++) {
-      printf("%c", plaintext2[i]);
-    }
-  return 0;
-}
