@@ -8,36 +8,17 @@
 #include <string.h>  /* strcpy */
 #include "../res/uthash.h"
 
-const size_t MAX_ENCRYPTIONS = 1;
-// We initialize the number_of_encryptions to the same value
-// of MAX_ENCRYPTIONS to force the initial generation of the IV
-size_t number_of_encryptions = 1;
-uint64_t current_iv[2] = {};
 bool debug = false;
-// Function to get random data and put it in buf.
-// Note getrandom function from linux/random.h was not used because I do not posses a new enough kernel (Manuel)
-ssize_t get_random(void *buf, size_t buflen) {
-  int randomData = open("/dev/urandom", O_RDONLY);
-  if (randomData < 0) {
-    // something went wrong
-    return -1;
-  } else {
-    return read(randomData, buf, buflen);
-  }
-}
-
-void generate_iv(uint64_t iv[]) {
-  if (number_of_encryptions < MAX_ENCRYPTIONS) {
-    current_iv[0]++;
-    current_iv[1]++;
-    number_of_encryptions++;
-  } else {
-    // Generate a totally new random IV
-    get_random(current_iv, sizeof(uint64_t) * 2);
-    number_of_encryptions = 0;
-  }
-  iv[0] = current_iv[0];
-  iv[1] = current_iv[1];
+// Function to get random data and put it in the IV.
+// Note getrandom function from linux/random.h was not used because we do not posses a new enough kernel (>= 3.17)
+ssize_t generate_iv(uint64_t iv[]) {
+    int randomData = open("/dev/urandom", O_RDONLY);
+    if (randomData < 0) {
+      // something went wrong
+      return -1;
+    } else {
+      return read(randomData, iv, sizeof(uint64_t) * 2);
+    }
 }
 
 size_t cbc_enc(uint64_t key[2], uint8_t *pt, uint8_t *ct, size_t plen) {

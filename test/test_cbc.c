@@ -56,6 +56,10 @@ uint64_t key[2] = {0, 0};
     }
 
     cbc_dec(key, ciphertext, plaintext2, plen);
+    printf("\nPlaintext:\n");
+    for (size_t i = 0; i < plen; i++) {
+      printf("%c", plaintext[i]);
+    }
     printf("\nDecryption:\n");
     for (size_t i = 0; i < plen; i++) {
       printf("%c", plaintext2[i]);
@@ -85,13 +89,13 @@ void test_attack(){
 }
 
 void run_cbc_enc_tests() {
-    printf("-------------- Testing CBC encryption determinism --------------\n");
+    printf("\n\n-------------- Testing CBC encryption determinism --------------\n");
     test_cbc_enc_is_not_deterministic();
     printf("-------------- Done testing CBC encryption determinism --------------\n");
 
-    printf("-------------- Testing CBC encryption and decryption --------------\n");
+    printf("\n\n-------------- Testing CBC encryption and decryption --------------\n");
     test_cbc_enc_and_dec();
     printf("-------------- Testing the attack --------------\n");
     test_attack();
-    printf("-------------- Done testing CBC encryption and decryption --------------\n");
+    printf("\n\n-------------- Done testing CBC encryption and decryption --------------\n");
 }
