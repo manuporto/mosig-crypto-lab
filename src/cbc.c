@@ -5,23 +5,25 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <string.h>  /* strcpy */
+#include "../res/uthash.h"
 
 const size_t MAX_ENCRYPTIONS = 1;
 // We initialize the number_of_encryptions to the same value
 // of MAX_ENCRYPTIONS to force the initial generation of the IV
 size_t number_of_encryptions = 1;
 uint64_t current_iv[2] = {};
-
+bool debug = false;
 // Function to get random data and put it in buf.
 // Note getrandom function from linux/random.h was not used because I do not posses a new enough kernel (Manuel)
 ssize_t get_random(void *buf, size_t buflen) {
   int randomData = open("/dev/urandom", O_RDONLY);
-    if (randomData < 0) {
-      // something went wrong
-      return -1;
-    } else {
-      return read(randomData, buf, buflen);
-    }
+  if (randomData < 0) {
+    // something went wrong
+    return -1;
+  } else {
+    return read(randomData, buf, buflen);
+  }
 }
 
 void generate_iv(uint64_t iv[]) {
@@ -54,8 +56,8 @@ size_t cbc_enc(uint64_t key[2], uint8_t *pt, uint8_t *ct, size_t plen) {
 
 
     tc0_encrypt(x, key);
-
-    printf("\nx after encryption: %lu %lu ", x[0], x[1]);
+    if(debug)
+      printf("\nx after encryption: %lu %lu ", x[0], x[1]);
 
     // We need to offset the ciphertext by 16 bytes becaues of the IV
     Uint64toUint8Arr(ct, x[0], 8 * (i + 2));
@@ -64,7 +66,8 @@ size_t cbc_enc(uint64_t key[2], uint8_t *pt, uint8_t *ct, size_t plen) {
     iv[0] = x[0];
     iv[1] = x[1];
   }
-  printf("\n");
+  if(debug)
+    printf("\n");
   return 0;
 }
 
@@ -82,7 +85,8 @@ size_t cbc_dec(uint64_t key[2], uint8_t *ct, uint8_t *pt, size_t clen) {
     next_iv[0] = x[0];
     next_iv[1] = x[1];
 
-    printf("\nx before decryption: %lu %lu ", x[0], x[1]);
+    if(debug)
+        printf("\nx before decryption: %lu %lu ", x[0], x[1]);
 
     tc0_decrypt(x, key);
     x[0] ^= iv[0];
@@ -90,7 +94,7 @@ size_t cbc_dec(uint64_t key[2], uint8_t *ct, uint8_t *pt, size_t clen) {
 
     iv[0] = next_iv[0];
     iv[1] = next_iv[1];
-    printf("\nx after decryption: %lu %lu ", x[0], x[1]);
+        printf("\nx after decryption: %lu %lu ", x[0], x[1]);
 
     Uint64toUint8Arr(pt, x[0], 8 * i);
     Uint64toUint8Arr(pt, x[1], 8 * (i + 1));
@@ -100,13 +104,13 @@ size_t cbc_dec(uint64_t key[2], uint8_t *ct, uint8_t *pt, size_t clen) {
 
 uint64_t Uint8ArrtoUint64(uint8_t *var, uint32_t lowest_pos) {
   return (((uint64_t)var[lowest_pos + 7]) << 56) |
-         (((uint64_t)var[lowest_pos + 6]) << 48) |
-         (((uint64_t)var[lowest_pos + 5]) << 40) |
-         (((uint64_t)var[lowest_pos + 4]) << 32) |
-         (((uint64_t)var[lowest_pos + 3]) << 24) |
-         (((uint64_t)var[lowest_pos + 2]) << 16) |
-         (((uint64_t)var[lowest_pos + 1]) << 8) |
-         (((uint64_t)var[lowest_pos]) << 0);
+  (((uint64_t)var[lowest_pos + 6]) << 48) |
+  (((uint64_t)var[lowest_pos + 5]) << 40) |
+  (((uint64_t)var[lowest_pos + 4]) << 32) |
+  (((uint64_t)var[lowest_pos + 3]) << 24) |
+  (((uint64_t)var[lowest_pos + 2]) << 16) |
+  (((uint64_t)var[lowest_pos + 1]) << 8) |
+  (((uint64_t)var[lowest_pos]) << 0);
 }
 
 void Uint64toUint8Arr(uint8_t *buf, uint64_t var, uint32_t lowest_pos) {
@@ -120,4 +124,60 @@ void Uint64toUint8Arr(uint8_t *buf, uint64_t var, uint32_t lowest_pos) {
   buf[lowest_pos + 7] = (var & 0xFF00000000000000) >> 56;
 }
 
-uint64_t attack(uint8_t *ct, size_t ctlen){}
+void to_block(uint8_t *block, size_t block_size, uint8_t *ct, uint32_t offset){
+  for (size_t i = 0; i < block_size; i++) {
+    block[i] = ct[offset + i];
+  }
+}
+
+struct uint8_t_hashable {
+  char block_field[HALF_BLOCK_SIZE * 2];              /* key */
+  UT_hash_handle hh;         /* makes this structure hashable */
+};
+
+uint64_t attack(uint8_t *ct, size_t ctlen){
+  struct uint8_t_hashable *b, *tmp = NULL;
+  struct uint8_t_hashable *hashtable = NULL;
+  size_t block_size = HALF_BLOCK_SIZE * 2;
+  uint64_t number_of_conflicts = 0;
+
+  for (size_t i = 16; i < ctlen; i+=block_size) { //start from 16 to avoid IVs
+    uint8_t block[block_size] = {0};
+    to_block(block, block_size, ct, i);
+    // printf("i %u\n",i);
+
+    HASH_FIND_STR( hashtable, (char*) block, b);
+
+
+
+    if( b==NULL ){
+      b = (struct uint8_t_hashable *)malloc(sizeof *b);
+      strcpy(b->block_field, (char*) block);
+      HASH_ADD_STR( hashtable, block_field, b );
+    }
+    else{//TODO conflict
+      printf("Conflict detected for block:\n");
+      for (size_t i = 0; i < block_size; i++) {
+          printf(" %u", (unsigned char) block[i]);
+      }
+      printf("\n");
+      number_of_conflicts++;
+    }
+  }
+
+  //printing function
+  // for(b=hashtable; b != NULL; b=(struct uint8_t_hashable*)(b->hh.next)) {
+  //   printf("\nblock");
+  //   for (size_t i = 0; i < block_size; i++) {
+  //     printf(" %u", (unsigned char) b->block_field[i]);
+  //   }
+  // }
+
+  /* free the hash table contents */
+  HASH_ITER(hh, hashtable, b, tmp) {
+    HASH_DEL(hashtable, b);
+    free(b);
+  }
+
+  return number_of_conflicts;
+}

@@ -2,7 +2,7 @@
 #include "test_cbc.h"
 
 #include <assert.h>
-#include <stdbool.h> 
+#include <stdbool.h>
 #include <stdio.h>
 
 void test_cbc_enc_is_not_deterministic() {
@@ -16,7 +16,7 @@ void test_cbc_enc_is_not_deterministic() {
     uint8_t ct_2[24] = {0};
     uint8_t ct_3[24] = {0}; // If we remove this we get a stack smashed error, no idea why
     uint64_t key[2] = {0};
-    printf("Pringint plain text...\n");
+    printf("Printing plain text...\n");
     for (size_t i = 0; i < plen; i++) {
         printf("x%lu: %u ", i, pt[i]);
     }
@@ -63,6 +63,27 @@ uint64_t key[2] = {0, 0};
     }
 }
 
+void test_attack(){
+    uint64_t key[2] = {0, 0};
+    size_t plen = 25600;
+    uint8_t plaintext[plen];
+    for (long int i = 0; i < plen; i++) {
+      plaintext[i] = i % 256;
+    }
+    // Cipher text has 16 additional bytes to store the IV
+    size_t clen = plen + 16;
+    uint8_t ciphertext[clen] = {0};
+
+
+    cbc_enc(key, plaintext, ciphertext, plen);
+
+    printf("\nAttack:\n");
+    uint64_t number_of_conflicts = attack(ciphertext, clen);
+
+    printf("===========Number of conflicts: %lu\n",number_of_conflicts );
+
+}
+
 void run_cbc_enc_tests() {
     printf("-------------- Testing CBC encryption determinism --------------\n");
     test_cbc_enc_is_not_deterministic();
@@ -70,5 +91,7 @@ void run_cbc_enc_tests() {
 
     printf("-------------- Testing CBC encryption and decryption --------------\n");
     test_cbc_enc_and_dec();
+    printf("-------------- Testing the attack --------------\n");
+    test_attack();
     printf("-------------- Done testing CBC encryption and decryption --------------\n");
 }
