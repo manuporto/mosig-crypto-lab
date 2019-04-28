@@ -7,9 +7,12 @@
 #include <unistd.h>
 #include <string.h>  /* strcpy */
 #include "../res/uthash.h"
+#include "functional"
+#include <set>
+#include <vector>
 
 bool debug = false;
-bool show_conflicts = false;
+bool show_conflicts = true;
 bool num_collision_mode = false;
 
 //struct for collision attack using uthash
@@ -129,52 +132,82 @@ void xor_block(uint8_t *ct1, uint8_t *ct2, uint8_t *value, size_t block_size){
   }
 }
 
+void fill_vector(std::vector<uint8_t> &v, uint8_t* data, size_t block_size, uint32_t offset){
+  v.erase(v.begin(), v.end());
+  for (size_t i = 0; i < block_size; i++) {
+    v.push_back(data[i + offset]);
+  }
+}
+
 uint64_t attack(uint8_t *ct, size_t ctlen){
-  struct block_hashable *b, *tmp = NULL;
-  struct block_hashable *hashtable = NULL;
+  std::set<std::vector<uint8_t>> hashset;
+
+
+
   size_t block_size = HALF_BLOCK_SIZE * 2;
   uint64_t number_of_conflicts = 0;
+  std::vector<uint8_t> vec;
   uint8_t xored_value[block_size] = {0};
-
   for (size_t i = 16; i < ctlen; i+=block_size) { //start from 16 to avoid IVs
-    uint8_t block[block_size] = {0};
-    to_block(block, block_size, ct, i);
-    HASH_FIND_STR( hashtable, (char*) block, b);
-    if( b==NULL ){
-      b = (struct block_hashable *)malloc(sizeof *b);
-      strcpy(b->block_field, (char*) block);
-      b->index = i;
-      HASH_ADD_STR( hashtable, block_field, b );
+    fill_vector(vec, ct, block_size, i);
+
+    auto conflict = hashset.find(vec);
+    if( conflict == hashset.end()){
+      hashset.insert(vec);
     }
     else{
       if(show_conflicts){//set to true if want to display conflicting blocks and their XOR
-          xor_block( block, (uint8_t*) b->block_field, xored_value, block_size);
-          printf("Conflict detected between elementes on index: %u and %u \n", i, b->index);
-          printf("m_%d xor m_%d = c_%d xor c_%d = ", i, b->index, i-1, b->index-1);
+        const std::vector<uint8_t>& vec_2 = (*conflict);
+          printf("%u, %u\n", vec.size(), vec_2.size());
           for (size_t j = 0; j < block_size; j++) {
-              printf(" %u", xored_value[j]);
+              printf("%u %u | ", vec[j], vec_2[j]);
           }
-          printf("\n");
+          // printf("\n");
       }
       number_of_conflicts++;
       if(num_collision_mode == false)//
         break;
     }
   }
-
-  //printing function
-  // for(b=hashtable; b != NULL; b=(struct block_hashable*)(b->hh.next)) {
-  //   printf("\nblock");
-  //   for (size_t i = 0; i < block_size; i++) {
-  //     printf(" %u", (unsigned char) b->block_field[i]);
+  printf("%u\n", hashset.size());
+  // struct block_hashable *b, *tmp = NULL;
+  // struct block_hashable *hashtable = NULL;
+  // size_t block_size = HALF_BLOCK_SIZE * 2;
+  // uint64_t number_of_conflicts = 0;
+  // uint8_t xored_value[block_size] = {0};
+  //
+  // for (size_t i = 16; i < ctlen; i+=block_size) { //start from 16 to avoid IVs
+  //   uint8_t block[block_size] = {0};
+  //   to_block(block, block_size, ct, i);
+  //   HASH_FIND_STR( hashtable, (char*) block, b);
+  //   if( b==NULL ){
+  //     b = (struct block_hashable *)malloc(sizeof *b);
+  //     strcpy(b->block_field, (char*) block);
+  //     b->index = i;
+  //     HASH_ADD_STR( hashtable, block_field, b );
+  //   }
+  //   else{
+  //     if(show_conflicts){//set to true if want to display conflicting blocks and their XOR
+  //         // xor_block( block, (uint8_t*) b->block_field, xored_value, block_size);
+  //         // printf("Conflict detected between elementes on index: %u and %u \n", i, b->index);
+  //         // printf("m_%d xor m_%d = c_%d xor c_%d = ", i, b->index, i-1, b->index-1);
+  //         for (size_t j = 0; j < block_size; j++) {
+  //             // printf(" %u", xored_value[j]);
+  //             printf("%u %u | ", (char) block[j], (char) b->block_field[j]);
+  //
+  //         }
+  //         printf("\n");
+  //     }
+  //     number_of_conflicts++;
+  //     if(num_collision_mode == false)//
+  //       break;
   //   }
   // }
-
-  /* free the hash table contents */
-  HASH_ITER(hh, hashtable, b, tmp) {
-    HASH_DEL(hashtable, b);
-    free(b);
-  }
+  // /* free the hash table contents */
+  // HASH_ITER(hh, hashtable, b, tmp) {
+  //   HASH_DEL(hashtable, b);
+  //   free(b);
+  // }
 
   return number_of_conflicts;
 }

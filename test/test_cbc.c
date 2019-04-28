@@ -69,7 +69,7 @@ uint64_t key[2] = {0, 0};
 
 void test_attack(){
     uint64_t key[2] = {0, 0};
-    size_t plen = 100000;
+    size_t plen = 65536;
     uint8_t plaintext[plen];
     for (long int i = 0; i < plen; i++) {
       plaintext[i] = i % 256;
