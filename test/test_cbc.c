@@ -69,7 +69,7 @@ uint64_t key[2] = {0, 0};
 
 void test_attack(){
     uint64_t key[2] = {0, 0};
-    size_t plen = 25600;
+    size_t plen = 100000;
     uint8_t plaintext[plen];
     for (long int i = 0; i < plen; i++) {
       plaintext[i] = i % 256;
@@ -95,7 +95,7 @@ void run_cbc_enc_tests() {
 
     printf("\n\n-------------- Testing CBC encryption and decryption --------------\n");
     test_cbc_enc_and_dec();
-    printf("-------------- Testing the attack --------------\n");
+    printf("\n-------------- Testing the attack --------------\n");
     test_attack();
     printf("\n\n-------------- Done testing CBC encryption and decryption --------------\n");
 }

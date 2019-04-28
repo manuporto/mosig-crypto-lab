@@ -9,6 +9,18 @@
 #include "../res/uthash.h"
 
 bool debug = false;
+bool show_conflicts = false;
+bool num_collision_mode = false;
+
+//struct for collision attack using uthash
+struct block_hashable {
+  char block_field[HALF_BLOCK_SIZE * 2];
+  size_t index;              /* key */
+  UT_hash_handle hh;         /* makes this structure hashable */
+};
+
+
+
 // Function to get random data and put it in the IV.
 // Note getrandom function from linux/random.h was not used because we do not posses a new enough kernel (>= 3.17)
 ssize_t generate_iv(uint64_t iv[]) {
@@ -111,43 +123,47 @@ void to_block(uint8_t *block, size_t block_size, uint8_t *ct, uint32_t offset){
   }
 }
 
-struct uint8_t_hashable {
-  char block_field[HALF_BLOCK_SIZE * 2];              /* key */
-  UT_hash_handle hh;         /* makes this structure hashable */
-};
+void xor_block(uint8_t *ct1, uint8_t *ct2, uint8_t *value, size_t block_size){
+  for (size_t i = 0; i < block_size; i++) {
+    value[i] = ct1[i] ^ ct2[i];
+  }
+}
 
 uint64_t attack(uint8_t *ct, size_t ctlen){
-  struct uint8_t_hashable *b, *tmp = NULL;
-  struct uint8_t_hashable *hashtable = NULL;
+  struct block_hashable *b, *tmp = NULL;
+  struct block_hashable *hashtable = NULL;
   size_t block_size = HALF_BLOCK_SIZE * 2;
   uint64_t number_of_conflicts = 0;
+  uint8_t xored_value[block_size] = {0};
 
   for (size_t i = 16; i < ctlen; i+=block_size) { //start from 16 to avoid IVs
     uint8_t block[block_size] = {0};
     to_block(block, block_size, ct, i);
-    // printf("i %u\n",i);
-
     HASH_FIND_STR( hashtable, (char*) block, b);
-
-
-
     if( b==NULL ){
-      b = (struct uint8_t_hashable *)malloc(sizeof *b);
+      b = (struct block_hashable *)malloc(sizeof *b);
       strcpy(b->block_field, (char*) block);
+      b->index = i;
       HASH_ADD_STR( hashtable, block_field, b );
     }
-    else{//TODO conflict
-      printf("Conflict detected for block:\n");
-      for (size_t i = 0; i < block_size; i++) {
-          printf(" %u", (unsigned char) block[i]);
+    else{
+      if(show_conflicts){//set to true if want to display conflicting blocks and their XOR
+          xor_block( block, (uint8_t*) b->block_field, xored_value, block_size);
+          printf("Conflict detected between elementes on index: %u and %u \n", i, b->index);
+          printf("m_%d xor m_%d = c_%d xor c_%d = ", i, b->index, i-1, b->index-1);
+          for (size_t j = 0; j < block_size; j++) {
+              printf(" %u", xored_value[j]);
+          }
+          printf("\n");
       }
-      printf("\n");
       number_of_conflicts++;
+      if(num_collision_mode == false)//
+        break;
     }
   }
 
   //printing function
-  // for(b=hashtable; b != NULL; b=(struct uint8_t_hashable*)(b->hh.next)) {
+  // for(b=hashtable; b != NULL; b=(struct block_hashable*)(b->hh.next)) {
   //   printf("\nblock");
   //   for (size_t i = 0; i < block_size; i++) {
   //     printf(" %u", (unsigned char) b->block_field[i]);
