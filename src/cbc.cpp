@@ -11,7 +11,7 @@
 #include <set>
 #include <vector>
 
-bool debug = false;
+bool debug = true;
 bool show_conflicts = true;
 bool num_collision_mode = false;
 
@@ -41,23 +41,24 @@ size_t cbc_enc(uint64_t key[2], uint8_t *pt, uint8_t *ct, size_t plen) {
   uint64_t iv[2] = {};
   // First we generate the IV and we prepend it to the ciphertext
   generate_iv(iv);
-  Uint64toUint8Arr(ct, iv[0], 0);
-  Uint64toUint8Arr(ct, iv[1], 8);
-  for (size_t i = 0; i * 8 < plen; i += 2) {
-    x[0] = Uint8ArrtoUint64(pt, 8 * i);
-    x[1] = Uint8ArrtoUint64(pt, 8 * (i + 1));
+  Uint64toUint8Arr(ct, iv[0], 0, 8);
+  Uint64toUint8Arr(ct, iv[1], 8, 8);
+  for (size_t i = 0; i * (HALF_BLOCK_SIZE/8) < plen; i += 2) {
+    x[0] = Uint8ArrtoUint64(pt, (HALF_BLOCK_SIZE/8) * i, HALF_BLOCK_SIZE/8);
+    x[1] = Uint8ArrtoUint64(pt, (HALF_BLOCK_SIZE/8) * (i + 1), HALF_BLOCK_SIZE/8);
 
     x[0] ^= iv[0];
     x[1] ^= iv[1];
 
-
+    if(debug)
+      printf("\nx before encryption: %lu %lu ", x[0], x[1]);
     tc0_encrypt(x, key);
     if(debug)
       printf("\nx after encryption: %lu %lu ", x[0], x[1]);
 
     // We need to offset the ciphertext by 16 bytes becaues of the IV
-    Uint64toUint8Arr(ct, x[0], 8 * (i + 2));
-    Uint64toUint8Arr(ct, x[1], 8 * (i + 3));
+    Uint64toUint8Arr(ct, x[0], 16 + (HALF_BLOCK_SIZE/8) * (i), HALF_BLOCK_SIZE/8);
+    Uint64toUint8Arr(ct, x[1], 16 + (HALF_BLOCK_SIZE/8) * (i + 1), HALF_BLOCK_SIZE/8);
 
     iv[0] = x[0];
     iv[1] = x[1];
@@ -72,12 +73,12 @@ size_t cbc_dec(uint64_t key[2], uint8_t *ct, uint8_t *pt, size_t clen) {
   uint64_t iv[2] = {};
   uint64_t next_iv[2] = {};
   // We extract the IV prepended to the ciphertext
-  iv[0] = Uint8ArrtoUint64(ct, 0);
-  iv[1] = Uint8ArrtoUint64(ct, 8);
-  for (size_t i = 0; i * 8 < clen; i += 2) {
+  iv[0] = Uint8ArrtoUint64(ct, 0, 8);
+  iv[1] = Uint8ArrtoUint64(ct, 8, 8);
+  for (size_t i = 16; i < clen; i += 2 *  (HALF_BLOCK_SIZE/8)) {
     // We need to offset the ciphertext by 16 bytes becaues of the IV
-    x[0] = Uint8ArrtoUint64(ct, 8 * (i + 2));
-    x[1] = Uint8ArrtoUint64(ct, 8 * (i + 3));
+    x[0] = Uint8ArrtoUint64(ct, i, HALF_BLOCK_SIZE/8);
+    x[1] = Uint8ArrtoUint64(ct, (i + HALF_BLOCK_SIZE/8), HALF_BLOCK_SIZE/8);
     next_iv[0] = x[0];
     next_iv[1] = x[1];
 
@@ -90,34 +91,44 @@ size_t cbc_dec(uint64_t key[2], uint8_t *ct, uint8_t *pt, size_t clen) {
 
     iv[0] = next_iv[0];
     iv[1] = next_iv[1];
-        printf("\nx after decryption: %lu %lu ", x[0], x[1]);
+    // if (debug)
+    //   printf("\nx after decryption: %lu %lu ", x[0], x[1]);
 
-    Uint64toUint8Arr(pt, x[0], 8 * i);
-    Uint64toUint8Arr(pt, x[1], 8 * (i + 1));
+    Uint64toUint8Arr(pt, x[0], (i - 16), (HALF_BLOCK_SIZE/8));
+    Uint64toUint8Arr(pt, x[1], (i - 16 + HALF_BLOCK_SIZE/8), (HALF_BLOCK_SIZE/8));
   }
   return 0;
 }
 
-uint64_t Uint8ArrtoUint64(uint8_t *var, uint32_t lowest_pos) {
-  return (((uint64_t)var[lowest_pos + 7]) << 56) |
-  (((uint64_t)var[lowest_pos + 6]) << 48) |
-  (((uint64_t)var[lowest_pos + 5]) << 40) |
-  (((uint64_t)var[lowest_pos + 4]) << 32) |
-  (((uint64_t)var[lowest_pos + 3]) << 24) |
-  (((uint64_t)var[lowest_pos + 2]) << 16) |
-  (((uint64_t)var[lowest_pos + 1]) << 8) |
-  (((uint64_t)var[lowest_pos]) << 0);
+uint64_t Uint8ArrtoUint64(uint8_t *var, uint32_t lowest_pos, size_t number_of_chars) {
+  uint8_t inv_var[number_of_chars];
+  size_t j = (number_of_chars + lowest_pos - 1);
+  for (size_t i = 0; i < number_of_chars; i++) {
+    inv_var[i] = var[j];
+    j--;
+  }
+  uint64_t x = 0;
+  for (size_t i = 0; i < number_of_chars; i++) {
+    x |= inv_var[i];
+    if (i != (number_of_chars -1)) x <<= 8;
+  }
+  return x;
 }
 
-void Uint64toUint8Arr(uint8_t *buf, uint64_t var, uint32_t lowest_pos) {
-  buf[lowest_pos] = (var & 0x00000000000000FF) >> 0;
-  buf[lowest_pos + 1] = (var & 0x000000000000FF00) >> 8;
-  buf[lowest_pos + 2] = (var & 0x0000000000FF0000) >> 16;
-  buf[lowest_pos + 3] = (var & 0x00000000FF000000) >> 24;
-  buf[lowest_pos + 4] = (var & 0x000000FF00000000) >> 32;
-  buf[lowest_pos + 5] = (var & 0x0000FF0000000000) >> 40;
-  buf[lowest_pos + 6] = (var & 0x00FF000000000000) >> 48;
-  buf[lowest_pos + 7] = (var & 0xFF00000000000000) >> 56;
+void Uint64toUint8Arr(uint8_t *buf, uint64_t var, uint32_t lowest_pos, size_t number_of_chars) {
+  uint64_t mask = 0x00000000000000FF;
+  for (size_t i = 0; i < number_of_chars; i++) {
+    buf[lowest_pos + i] = (var & mask) >> (i * 8);
+    mask <<= 8;
+  }
+  // buf[lowest_pos] = (var & 0x00000000000000FF) >> 0;
+  // buf[lowest_pos + 1] = (var & 0x000000000000FF00) >> 8;
+  // buf[lowest_pos + 2] = (var & 0x0000000000FF0000) >> 16;
+  // buf[lowest_pos + 3] = (var & 0x00000000FF000000) >> 24;
+  // buf[lowest_pos + 4] = (var & 0x000000FF00000000) >> 32;
+  // buf[lowest_pos + 5] = (var & 0x0000FF0000000000) >> 40;
+  // buf[lowest_pos + 6] = (var & 0x00FF000000000000) >> 48;
+  // buf[lowest_pos + 7] = (var & 0xFF00000000000000) >> 56;
 }
 
 void to_block(uint8_t *block, size_t block_size, uint8_t *ct, uint32_t offset){

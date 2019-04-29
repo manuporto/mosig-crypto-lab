@@ -12,9 +12,9 @@ void addToBitsAtPosition(uint8_t location, uint64_t *bits, uint8_t to_be_added);
 
 void backToArray(uint8_t *ct, uint64_t bits, size_t offset);
 
-uint64_t Uint8ArrtoUint64 (uint8_t* var, uint32_t lowest_pos);
+uint64_t Uint8ArrtoUint64 (uint8_t* var, uint32_t lowest_pos, size_t number_of_chars);
 
-void Uint64toUint8Arr (uint8_t* buf, uint64_t var, uint32_t lowest_pos);
+void Uint64toUint8Arr (uint8_t* buf, uint64_t var, uint32_t lowest_pos, size_t number_of_chars);
 
 uint64_t attack(uint8_t *ct, size_t ctlen);
 
