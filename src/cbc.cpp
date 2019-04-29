@@ -11,7 +11,7 @@
 #include <set>
 #include <vector>
 
-bool debug = true;
+bool debug = false;
 bool show_conflicts = true;
 bool num_collision_mode = false;
 
@@ -37,24 +37,37 @@ ssize_t generate_iv(uint64_t iv[]) {
 }
 
 size_t cbc_enc(uint64_t key[2], uint8_t *pt, uint8_t *ct, size_t plen) {
-  uint64_t x[2] = {};
-  uint64_t iv[2] = {};
+  uint64_t x[2] = {0};
+  uint64_t iv[2] = {0};
+  uint64_t iv_temp[2] = {0};
   // First we generate the IV and we prepend it to the ciphertext
   generate_iv(iv);
+  if(debug)
+    printf("\n IVs: %x %x ", iv[0], iv[1]);
+
+  uint64_t masks[8] = {0x00000000000000FF, 0x000000000000FFFF, 0x0000000000FFFFFF, 0x00000000FFFFFFFF, 0x000000FFFFFFFFFF, 0x0000FFFFFFFFFFFF, 0x00FFFFFFFFFFFFFF, 0xFFFFFFFFFFFFFFFF};
+  iv[0] = iv[0] & masks[HALF_BLOCK_SIZE/8 - 1];
+  iv[1] = iv[1] & masks[HALF_BLOCK_SIZE/8 - 1];
+
+
+  if(debug)
+    printf("\n IVs: %x %x ", iv[0], iv[1]);
   Uint64toUint8Arr(ct, iv[0], 0, 8);
   Uint64toUint8Arr(ct, iv[1], 8, 8);
   for (size_t i = 0; i * (HALF_BLOCK_SIZE/8) < plen; i += 2) {
     x[0] = Uint8ArrtoUint64(pt, (HALF_BLOCK_SIZE/8) * i, HALF_BLOCK_SIZE/8);
     x[1] = Uint8ArrtoUint64(pt, (HALF_BLOCK_SIZE/8) * (i + 1), HALF_BLOCK_SIZE/8);
 
+    if(debug)
+      printf("\nx before encryption and XOR IV: %x %x ", x[0], x[1]);
     x[0] ^= iv[0];
     x[1] ^= iv[1];
 
     if(debug)
-      printf("\nx before encryption: %lu %lu ", x[0], x[1]);
+      printf("\nx before encryption: %x %x ", x[0], x[1]);
     tc0_encrypt(x, key);
     if(debug)
-      printf("\nx after encryption: %lu %lu ", x[0], x[1]);
+      printf("\nx after encryption: %x %x ", x[0], x[1]);
 
     // We need to offset the ciphertext by 16 bytes becaues of the IV
     Uint64toUint8Arr(ct, x[0], 16 + (HALF_BLOCK_SIZE/8) * (i), HALF_BLOCK_SIZE/8);
@@ -69,12 +82,15 @@ size_t cbc_enc(uint64_t key[2], uint8_t *pt, uint8_t *ct, size_t plen) {
 }
 
 size_t cbc_dec(uint64_t key[2], uint8_t *ct, uint8_t *pt, size_t clen) {
-  uint64_t x[2] = {};
-  uint64_t iv[2] = {};
-  uint64_t next_iv[2] = {};
+  uint64_t x[2] = {0};
+  uint64_t iv[2] = {0};
+  uint64_t next_iv[2] = {0};
   // We extract the IV prepended to the ciphertext
   iv[0] = Uint8ArrtoUint64(ct, 0, 8);
   iv[1] = Uint8ArrtoUint64(ct, 8, 8);
+  if(debug)
+    printf("\n IVs: %x %x ", iv[0], iv[1]);
+
   for (size_t i = 16; i < clen; i += 2 *  (HALF_BLOCK_SIZE/8)) {
     // We need to offset the ciphertext by 16 bytes becaues of the IV
     x[0] = Uint8ArrtoUint64(ct, i, HALF_BLOCK_SIZE/8);
@@ -83,16 +99,18 @@ size_t cbc_dec(uint64_t key[2], uint8_t *ct, uint8_t *pt, size_t clen) {
     next_iv[1] = x[1];
 
     if(debug)
-        printf("\nx before decryption: %lu %lu ", x[0], x[1]);
+        printf("\nx before decryption: %x %x ", x[0], x[1]);
 
     tc0_decrypt(x, key);
+    if(debug)
+      printf("\nx after decryption: %x %x ", x[0], x[1]);
     x[0] ^= iv[0];
     x[1] ^= iv[1];
 
     iv[0] = next_iv[0];
     iv[1] = next_iv[1];
-    // if (debug)
-    //   printf("\nx after decryption: %lu %lu ", x[0], x[1]);
+        if(debug)
+          printf("\nx after decryption and XOR IV: %x %x ", x[0], x[1]);
 
     Uint64toUint8Arr(pt, x[0], (i - 16), (HALF_BLOCK_SIZE/8));
     Uint64toUint8Arr(pt, x[1], (i - 16 + HALF_BLOCK_SIZE/8), (HALF_BLOCK_SIZE/8));
@@ -121,14 +139,6 @@ void Uint64toUint8Arr(uint8_t *buf, uint64_t var, uint32_t lowest_pos, size_t nu
     buf[lowest_pos + i] = (var & mask) >> (i * 8);
     mask <<= 8;
   }
-  // buf[lowest_pos] = (var & 0x00000000000000FF) >> 0;
-  // buf[lowest_pos + 1] = (var & 0x000000000000FF00) >> 8;
-  // buf[lowest_pos + 2] = (var & 0x0000000000FF0000) >> 16;
-  // buf[lowest_pos + 3] = (var & 0x00000000FF000000) >> 24;
-  // buf[lowest_pos + 4] = (var & 0x000000FF00000000) >> 32;
-  // buf[lowest_pos + 5] = (var & 0x0000FF0000000000) >> 40;
-  // buf[lowest_pos + 6] = (var & 0x00FF000000000000) >> 48;
-  // buf[lowest_pos + 7] = (var & 0xFF00000000000000) >> 56;
 }
 
 void to_block(uint8_t *block, size_t block_size, uint8_t *ct, uint32_t offset){
@@ -143,44 +153,39 @@ void xor_block(uint8_t *ct1, uint8_t *ct2, uint8_t *value, size_t block_size){
   }
 }
 
-void fill_vector(std::vector<uint8_t> &v, uint8_t* data, size_t block_size, uint32_t offset){
+void fill_vector(std::vector<uint8_t> &v, uint8_t* data, size_t number_of_chars, uint32_t offset){
   v.erase(v.begin(), v.end());
-  for (size_t i = 0; i < block_size; i++) {
+  for (size_t i = 0; i < number_of_chars; i++) {
     v.push_back(data[i + offset]);
   }
 }
 
 uint64_t attack(uint8_t *ct, size_t ctlen){
-  std::set<std::vector<uint8_t>> hashset;
+  std::set<uint64_t> hashset;
 
-
-
+  //
+  //
   size_t block_size = HALF_BLOCK_SIZE * 2;
   uint64_t number_of_conflicts = 0;
-  std::vector<uint8_t> vec;
-  uint8_t xored_value[block_size] = {0};
-  for (size_t i = 16; i < ctlen; i+=block_size) { //start from 16 to avoid IVs
-    fill_vector(vec, ct, block_size, i);
+  for (size_t i = 16; i < ctlen; i += block_size/8) { //start from 16 to avoid IVs
 
-    auto conflict = hashset.find(vec);
+    auto conflict = hashset.find(Uint8ArrtoUint64(ct, i, block_size/8));
     if( conflict == hashset.end()){
-      hashset.insert(vec);
+      hashset.insert(Uint8ArrtoUint64(ct, i, block_size/8));
     }
     else{
-      if(show_conflicts){//set to true if want to display conflicting blocks and their XOR
-        const std::vector<uint8_t>& vec_2 = (*conflict);
-          printf("%u, %u\n", vec.size(), vec_2.size());
-          for (size_t j = 0; j < block_size; j++) {
-              printf("%u %u | ", vec[j], vec_2[j]);
-          }
-          // printf("\n");
-      }
+      // if(show_conflicts){//set to true if want to display conflicting blocks and their XOR
+      //     printf("%u, %u\n", vec.size(), vec_2.size());
+      //     for (size_t j = 0; j < block_size; j++) {
+      //         printf("%u %u | ", vec[j], vec_2[j]);
+      //     }
+      //     printf("\n");
+      // }
       number_of_conflicts++;
       if(num_collision_mode == false)//
         break;
     }
   }
-  printf("%u\n", hashset.size());
   // struct block_hashable *b, *tmp = NULL;
   // struct block_hashable *hashtable = NULL;
   // size_t block_size = HALF_BLOCK_SIZE * 2;
