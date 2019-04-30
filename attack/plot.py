@@ -1,6 +1,6 @@
 from matplotlib import pyplot as plt
 BLOCK_SIZE = 32;
-font_size_title = 15
+font_size_title = 14
 font_size_labels = 15
 lenghts=[]
 probs = []

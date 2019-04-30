@@ -10,7 +10,7 @@ int main(int argc, char const *argv[]) {
     fp = fopen("data.txt", "w+");
 
     uint64_t key[2] = {0, 0};
-    size_t number_of_runs = 50;
+    size_t number_of_runs = 2;
     size_t number_of_plaintexts = 10;
     size_t num_of_blocks = pow(2, HALF_BLOCK_SIZE-number_of_plaintexts);
     size_t plen; // number of blocks * number of bits in a block
