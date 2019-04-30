@@ -5,14 +5,13 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include <string.h>  /* strcpy */
 #include <functional>
 #include <unordered_set>
-#include <vector>
+#include <unordered_map>
 
 bool debug = false;
-bool show_conflicts = false;
-bool num_collision_mode = false;
+bool show_conflicts = false;//set to true if want to display conflicting blocks and their XOR
+bool count_collision_mode = false; //set to true to get the total number of collisions in a given ciphertext
 
 
 
@@ -37,7 +36,10 @@ size_t cbc_enc(uint64_t key[2], uint8_t *pt, uint8_t *ct, size_t plen) {
   if(debug)
     printf("\n IVs: %x %x ", iv[0], iv[1]);
 
-  uint64_t masks[8] = {0x00000000000000FF, 0x000000000000FFFF, 0x0000000000FFFFFF, 0x00000000FFFFFFFF, 0x000000FFFFFFFFFF, 0x0000FFFFFFFFFFFF, 0x00FFFFFFFFFFFFFF, 0xFFFFFFFFFFFFFFFF};
+  uint64_t masks[8] = {0x00000000000000FF, 0x000000000000FFFF,
+                       0x0000000000FFFFFF, 0x00000000FFFFFFFF,
+                       0x000000FFFFFFFFFF, 0x0000FFFFFFFFFFFF,
+                       0x00FFFFFFFFFFFFFF, 0xFFFFFFFFFFFFFFFF};
   iv[0] = iv[0] & masks[HALF_BLOCK_SIZE/8 - 1];
   iv[1] = iv[1] & masks[HALF_BLOCK_SIZE/8 - 1];
 
@@ -133,72 +135,65 @@ void Uint64toUint8Arr(uint8_t *buf, uint64_t var, uint32_t lowest_pos, size_t nu
   }
 }
 
-void to_block(uint8_t *block, size_t block_size, uint8_t *ct, uint32_t offset){
-  for (size_t i = 0; i < block_size; i++) {
+void to_block(uint8_t *block, size_t BLOCK_SIZE, uint8_t *ct, uint32_t offset){
+  for (size_t i = 0; i < BLOCK_SIZE; i++) {
     block[i] = ct[offset + i];
   }
 }
 
-void xor_block(uint8_t *ct1, uint8_t *ct2, uint8_t *value, size_t block_size){
-  for (size_t i = 0; i < block_size; i++) {
-    value[i] = ct1[i] ^ ct2[i];
+void xor_blocks(uint8_t *block1, uint8_t *block2, uint8_t *xored_block, size_t number_of_chars){
+  for (size_t i = 0; i < number_of_chars; i++) {
+    xored_block[i] = block1[i] ^ block2[i];
   }
 }
 
-void fill_vector(std::vector<uint8_t> &v, uint8_t* data, size_t number_of_chars, uint32_t offset){
-  v.erase(v.begin(), v.end());
-  for (size_t i = 0; i < number_of_chars; i++) {
-    v.push_back(data[i + offset]);
-  }
-}
-uint64_t hash(const uint8_t *block, size_t block_size)
-{
+uint64_t hash(const uint8_t *block, size_t BLOCK_SIZE){
     uint64_t h = 0;
-    for (size_t i = 0; i < block_size; i++) {
+    for (size_t i = 0; i < BLOCK_SIZE; i++) {
        h = h << 1 ^ block[i];
      }
     return h;
 }
 
 uint64_t attack(uint8_t *ct, size_t ctlen){
-  std::unordered_set<uint64_t> hashset;
- FILE *fp;
+  std::unordered_map<uint64_t, size_t> hash_map;
 
-  fp = fopen("data.txt", "w+");
-
-  size_t block_size = HALF_BLOCK_SIZE * 2;
+  size_t BLOCK_SIZE = HALF_BLOCK_SIZE * 2;
   uint64_t number_of_conflicts = 0;
-  for (size_t i = 16; i < ctlen; i += block_size/8) { //start from 16 to avoid IVs
-    uint8_t block[block_size/8] = {0};
-    to_block(block, block_size/8, ct, i);
-    for (size_t j = 0; j < block_size/8; j++) {
-      // printf("%u ", block[j]);
-      fprintf(fp, "%u ", block[j]);
-    }
-    fprintf(fp, "\n");
-    // printf("%u\n", i);
-    uint64_t number = 0;
-    // number = Uint8ArrtoUint64(ct, i, block_size/8);
-    number = std::hash<std::string>{}(std::string( block, block + (block_size/8) ));
-    auto conflict = hashset.find(number);
-    if( conflict == hashset.end()){
-      hashset.insert(number);
-      // printf("%llu\n", number );
-      // fprintf(fp, "%lu\n", number);
+  for (size_t i = 16; i < ctlen; i += BLOCK_SIZE/8) { //start from 16 to avoid IVs
+    uint8_t block[BLOCK_SIZE/8] = {0};
+    to_block(block, BLOCK_SIZE/8, ct, i);
+    uint64_t hashed_value = 0;
+    //compute hash of the current block
+    hashed_value = std::hash<std::string>{}(std::string( block, block + (BLOCK_SIZE/8) ));
+
+    //find conflicts
+    auto conflict = hash_map.find(hashed_value);
+    if( conflict == hash_map.end()){ //if no conflicts, add new value
+      hash_map.insert(std::make_pair(hashed_value, i));
     }
     else{
       if(show_conflicts){//set to true if want to display conflicting blocks and their XOR
-          // for (size_t j = 0; j < block_size/8; j++) {
-          //     printf("%u %u | ", vec[j], vec_2[j]);
-          // }
-          // printf("\n");
+        uint8_t xored_block[BLOCK_SIZE/8] = {0};
+        std::pair<uint64_t, size_t> p = *conflict;
+        size_t index2 = std::get<1>(p);
+        uint8_t block1[BLOCK_SIZE/8] = {0};
+        uint8_t block2[BLOCK_SIZE/8] = {0};
+
+        //we need to move the index two blocks before the actual one, this works also for the IVs
+        to_block(block1, BLOCK_SIZE/8, ct, i - 2 * (BLOCK_SIZE/8));
+        to_block(block2, BLOCK_SIZE/8, ct, index2  - 2 * (BLOCK_SIZE/8));
+        //xor the blocks and print them
+        xor_blocks(block, block2, xored_block, BLOCK_SIZE/8);
+        printf("Collision detected between blocks: %d and %d\n", i, index2);
+        for (size_t j = 0; j < BLOCK_SIZE/8; j++) {
+          printf("%u %u |%u    ", block1, block2, xored_block[j]);
+        }
       }
       number_of_conflicts++;
-      if(num_collision_mode == false)//
-        break;
+      if(count_collision_mode == false)//set to true to get the total number of collisions in a given ciphertext
+      break;
     }
   }
-  fclose(fp);
-
   return number_of_conflicts;
 }
