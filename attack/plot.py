@@ -11,7 +11,7 @@ with open('data.txt', 'r') as f:
         lenghts.append(int(row[0]))
         probs.append(float(row[1]))
 
-plt.title("The graph of probability of a conflict for BLOCK_SIZE=" + str(BLOCK_SIZE), fontsize=font_size_title)
+plt.title("The graph of probability of a conflict for BLOCK_SIZE=" + str(BLOCK_SIZE) +  " bits", fontsize=font_size_title)
 plt.xlabel("Lenght of the plaintext in blocks", fontsize=font_size_labels)
 plt.ylabel("Probability of a collision", fontsize=font_size_labels)
 plt.plot(lenghts, probs, lw=7)
