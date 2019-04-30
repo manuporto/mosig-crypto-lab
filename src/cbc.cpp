@@ -7,7 +7,7 @@
 #include <unistd.h>
 #include <string.h>  /* strcpy */
 #include <functional>
-#include <set>
+#include <unordered_set>
 #include <vector>
 
 bool debug = false;
@@ -161,7 +161,7 @@ uint64_t hash(const uint8_t *block, size_t block_size)
 }
 
 uint64_t attack(uint8_t *ct, size_t ctlen){
-  std::set<uint64_t> hashset;
+  std::unordered_set<uint64_t> hashset;
  FILE *fp;
 
   fp = fopen("data.txt", "w+");
